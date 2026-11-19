@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vox Angelica</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{font-family:Inter,sans-serif;font-size:19px;color:#0f2350;background:linear-gradient(160deg,#ffffff 0%,#fbf3dc 42%,#dce8fb 100%) fixed;min-height:100vh}
+.card{background:rgba(255,255,255,.88);border:1px solid rgba(201,162,75,.45);border-radius:1.1rem;padding:1.6rem;box-shadow:0 4px 18px rgba(201,162,75,.15)}
+.btn{background:linear-gradient(135deg,#f0d98f,#c9a24b);color:#0f2350;font-weight:600;padding:.8rem 1.5rem;border-radius:.7rem;font-size:1.1rem}
+.btn.big{font-size:1.5rem;padding:1.1rem 3rem}
+.btn2{border:1px solid #c9a24b;color:#7a5a14;background:#fffdf5;padding:.5rem 1.1rem;border-radius:.6rem;font-size:1.05rem}
+.inp{background:#fff;border:1px solid #d9c690;border-radius:.6rem;padding:.8rem 1rem;color:#0f2350;font-size:1.1rem}
+.inp:focus,.btn:focus-visible,.btn2:focus-visible{outline:2px solid #c9a24b}
+.badge{padding:.2rem .8rem;border-radius:99px;font-size:.9rem;font-weight:600}
+.g{background:#dcfce7;color:#166534}.y{background:#fef3c7;color:#92400e}.r{background:#fee2e2;color:#991b1b}
+table{width:100%;font-size:1.1rem}td,th{padding:.7rem .7rem;text-align:left;border-bottom:1px solid #efe3c4}th{color:#7a5a14}
+h2{font-family:'Cormorant Garamond',serif;font-size:1.9rem;font-weight:700;color:#8a6516;margin-bottom:.5rem}
+.tab{padding:.65rem 1.3rem;border-radius:99px;font-size:1.1rem;white-space:nowrap;color:#4b5d86;background:rgba(255,255,255,.6)}
+.tab.on{background:linear-gradient(135deg,#f0d98f,#c9a24b);color:#0f2350;font-weight:600}
+.text-amber-200{color:#9a7420!important}.text-slate-300,.text-slate-400{color:#4b5d86!important}
+.border-blue-900{border-color:#e8dcc0!important}.bg-blue-950{background:#fbf6e8!important}
+@media(max-width:640px){
+body{font-size:16.5px}
+.card{padding:1rem;border-radius:.9rem}
+h2{font-size:1.5rem}
+form .inp,form .btn,.btn.big{width:100%}
+.btn.big{font-size:1.35rem;padding:1.1rem 1rem}
+.btn2{padding:.55rem .9rem}
+.inp{font-size:1rem}
+table{font-size:.95rem}td,th{padding:.55rem .5rem;white-space:nowrap}
+td:first-child,th:first-child{position:sticky;left:0;background:#fffdf5;z-index:1}
+.tab{padding:.6rem 1rem;font-size:1rem}
+.text-6xl{font-size:2.6rem!important;line-height:1!important}
+.text-5xl{font-size:2.1rem!important;line-height:1.1!important}
+}
+html{-webkit-text-size-adjust:100%}main{min-width:0}
+</style></head>
+<body><div id="app"></div><div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gold-500 hidden px-4 py-2 rounded-lg text-sm" style="background:#e8cf8c;color:#0a1733"></div>
+<script>
+/* ===== Konfigurasi & helper ===== */
+const KAS=10000,DUKA=20000,SAKIT=10000,Y=new Date().getFullYear();
+const BLN=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const MONTHS=BLN.map((_,i)=>`${Y}-${String(i+1).padStart(2,'0')}`);
+const $=s=>document.querySelector(s),uid=()=>Math.random().toString(36).slice(2,9);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rp=n=>'Rp'+n.toLocaleString('id-ID'),fmt=d=>new Date(d+'T00:00').toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
+const fd=e=>{e.preventDefault();return Object.fromEntries(new FormData(e.target))};
+const rd=f=>new Promise(r=>{const x=new FileReader();x.onload=()=>r(x.result);x.readAsDataURL(f)});
+const toast=t=>{const e=$('#toast');e.textContent=t;e.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.add('hidden'),3500)};
+const badge=t=>`<span class="badge ${{LUNAS:'g',DISETUJUI:'g',HADIR:'g',BERLANGSUNG:'g',SELESAI:'g',MENUNGGU:'y',TERJADWAL:'y',IZIN:'y',DUKA:'y',BELUM:'r',DITOLAK:'r',SAKIT:'r'}[t]||'y'}">${t}</span>`;
+const tbl=(h,rows)=>`<div class="overflow-x-auto"><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(x=>`<td>${x}</td>`).join('')}</tr>`).join('')}</table></div>`;
+const stat=(l,v)=>`<div class="card"><div class="font-serif text-6xl text-amber-200">${v}</div><div class="text-sm text-slate-300">${l}</div></div>`;
+const fileLink=(p,n)=>p?.startsWith('data:image')?`<a href="${p}" download="${esc(n)}"><img src="${p}" class="max-h-40 rounded-lg my-2"></a>`:`<a class="underline text-amber-200" href="${p}" download="${esc(n)}">Unduh ${esc(n)}</a>`;
+const empty=t=>`<p class="text-sm text-slate-400">${t}</p>`;
+
+/* ===== Data (demo: localStorage. Produksi: ganti ke Supabase, lihat schema.sql) ===== */
+function seed(){const d=new Date().toISOString().slice(0,10);return{
+users:[{id:'bph',name:'BPH Vox Angelica',email:'',phone:'-',pass:'VoxAngelica2026',role:'BPH',status:'Aktif'}],
+sessions:[],att:[],kas:[],songs:[],agenda:[],ann:[],social:[]}}
+let db=JSON.parse(localStorage.getItem('vox2')||'null')||seed(),me=sessionStorage.getItem('voxme'),tab='home',reg=false;
+const save=()=>{try{localStorage.setItem('vox2',JSON.stringify(db))}catch(e){toast('Penyimpanan penuh, gunakan file lebih kecil')}};
+const cur=()=>db.users.find(u=>u.id===me),isB=()=>cur()?.role==='BPH',nm=id=>esc(db.users.find(u=>u.id===id)?.name||'-');
+const kasOf=(u,m)=>db.kas.find(k=>k.uid===u&&k.m===m),mem=()=>db.users.filter(u=>u.role==='ANGGOTA');
+(function mig(){db.ann=db.ann||[];(db.agenda||[]).forEach(a=>db.ann.push({id:uid(),type:a.type,title:a.title,date:a.date,place:a.place,body:'',at:a.date}));db.agenda=[];
+db.ann.forEach(a=>{a.id=a.id||uid();a.type=a.type||'Pengumuman'});
+db.sessions.forEach(x=>{const a=db.ann.find(y=>y.sid===x.id)||db.ann.find(y=>!y.sid&&y.type==='Latihan'&&y.date===x.date);if(a)a.sid=x.id;else db.ann.push({id:uid(),type:'Latihan',title:x.title,date:x.date,place:'',body:'',at:x.date,sid:x.id})});
+db.ann.filter(a=>a.type==='Latihan'&&!a.sid&&a.date).forEach(a=>{const x={id:uid(),title:a.title,date:a.date,status:'TERJADWAL'};db.sessions.push(x);a.sid=x.id});save()})();
+
+async function notify(subject,body){if(!mem().some(u=>u.email))return toast('Isi email anggota di Master Data agar notifikasi terkirim');try{const r=await fetch('/api/notify',{method:'POST',headers:{'Content-Type':'application/json'},
+body:JSON.stringify({subject,to:mem().map(u=>u.email).filter(Boolean),html:`<div style="font-family:Arial,sans-serif"><h2>${esc(subject)}</h2>${body}<p>Salam, BPH Vox Angelica</p></div>`})});
+toast(r.ok?'Notifikasi email terkirim ke seluruh anggota':'Email belum terkirim, periksa RESEND_API_KEY')}catch{toast('Email belum terkirim (API belum aktif)')}}
+
+/* ===== Aksi ===== */
+const Au={go(e){const d=fd(e),n=d.name.trim().toLowerCase();if(reg){if(db.users.some(u=>u.name.toLowerCase()===n))return toast('Nama sudah terdaftar, tambahkan nama belakang');
+const u={id:uid(),name:d.name.trim(),email:'',phone:d.phone,pass:d.pass,role:'ANGGOTA',status:'Aktif'};db.users.push(u);save();me=u.id}
+else{const u=db.users.find(u=>u.name.toLowerCase()===n&&u.pass===d.pass);if(!u)return toast('Nama atau kata sandi salah');me=u.id}
+sessionStorage.setItem('voxme',me);showAuth=false;render()},
+out(){sessionStorage.removeItem('voxme');me=null;tab='home';render()},
+open(r){reg=r;showAuth=true;render()},
+email(id,v){db.users.find(u=>u.id===id).email=v.trim();save();toast('Email disimpan')}};
+const A={add(e){const d=fd(e);db.sessions.unshift({id:uid(),title:d.title,date:d.date,status:'TERJADWAL'});save();render();
+notify('Jadwal latihan baru: '+d.title,`<p>${esc(d.title)} pada ${fmt(d.date)}.</p>`)},
+set(id,st){db.sessions.find(s=>s.id===id).status=st;save();render()},
+mark(sid,st){if(!cur())return askLogin();if(db.sessions.find(s=>s.id===sid)?.status!=='BERLANGSUNG')return toast('Absensi belum dibuka BPH');
+if(db.att.find(a=>a.sid===sid&&a.uid===me&&a.ap==='DISETUJUI'))return toast('Absensi Anda sudah disetujui BPH');
+db.att=db.att.filter(a=>!(a.sid===sid&&a.uid===me));db.att.push({sid,uid:me,status:st,ap:'MENUNGGU',time:new Date().toISOString()});save();toast('Absensi terkirim, menunggu persetujuan BPH');render()},
+ap(sid,u,v){const a=db.att.find(x=>x.sid===sid&&x.uid===u);if(a){a.ap=v;save();render()}},
+okAll(sid){db.att.filter(a=>a.sid===sid&&a.ap==='MENUNGGU').forEach(a=>a.ap='DISETUJUI');save();render()}};
+const K={async up(e){const d=fd(e),f=e.target.file.files[0];if(d.how==='TRANSFER'&&!f)return toast('Pilih foto bukti transfer');if(f&&f.size>1.5e6)return toast('Ukuran maksimal 1,5 MB');
+let k=kasOf(me,d.m);if(!k)db.kas.push(k={uid:me,m:d.m});k.st='MENUNGGU';k.how=d.how;k.proof=f?await rd(f):'';k.fn=f?f.name:'';save();toast('Konfirmasi terkirim, menunggu approval BPH');render()},
+tog(u,m){let k=kasOf(u,m);if(!k)db.kas.push(k={uid:u,m,st:'BELUM'});k.st=k.st==='LUNAS'?'BELUM':'LUNAS';if(k.st==='LUNAS'&&!k.how)k.how='TUNAI';save();render()},
+set(u,m,st){kasOf(u,m).st=st;save();render()}};
+const S={async add(e){const d=fd(e),f=e.target.file.files[0];if(!f&&!d.video)return toast('Isi file teks/partitur atau link video');if(f&&f.size>1.5e6)return toast('Ukuran maksimal 1,5 MB');
+db.songs.unshift({id:uid(),title:d.title,note:d.note,video:d.video.trim(),file:f?await rd(f):'',fn:f?f.name:''});save();render()}};
+const G={add(e){const d=fd(e),t=d.type;if(t!=='Pengumuman'&&!d.date)return toast('Isi tanggalnya dulu');
+const a={id:uid(),type:t,title:d.title,body:d.body||'',date:d.date||'',place:d.place||'',at:new Date().toISOString().slice(0,10)};
+if(t==='Latihan'){const x={id:uid(),title:d.title,date:d.date,status:'TERJADWAL'};db.sessions.unshift(x);a.sid=x.id}
+db.ann.unshift(a);save();render();notify((t==='Pengumuman'?'Pengumuman: ':t+': ')+d.title,`<p>${d.date?fmt(d.date)+' ':''}${d.place?'di '+esc(d.place)+'.':''}</p>${d.body?`<p>${esc(d.body)}</p>`:''}`)},
+del(id){const a=db.ann.find(x=>x.id===id);if(!a||!confirm('Hapus "'+a.title+'"?'+(a.sid?' Absensi latihan ini juga ikut terhapus.':'')))return;
+if(a.sid){db.sessions=db.sessions.filter(x=>x.id!==a.sid);db.att=db.att.filter(x=>x.sid!==a.sid)}db.ann=db.ann.filter(x=>x.id!==id);save();render()}};
+const D={add(e){const d=fd(e);db.social.unshift({id:uid(),type:d.type,who:d.who,note:d.note,visit:d.visit,amount:d.type==='DUKA'?DUKA:SAKIT,paid:[],wait:[]});save();render()},
+tog(id,u){const c=db.social.find(x=>x.id===id);c.paid=c.paid.includes(u)?c.paid.filter(x=>x!==u):[...c.paid,u];c.wait=(c.wait||[]).filter(x=>x!==u);save();render()},
+pay(id){if(!cur())return askLogin();const c=db.social.find(x=>x.id===id);c.wait=c.wait||[];if(!c.paid.includes(me)&&!c.wait.includes(me))c.wait.push(me);save();render()},
+ap(id,u,v){const c=db.social.find(x=>x.id===id);c.wait=(c.wait||[]).filter(x=>x!==u);if(v==='ok'&&!c.paid.includes(u))c.paid.push(u);save();render()},
+remind(id){const c=db.social.find(x=>x.id===id),n=mem().filter(u=>!c.paid.includes(u.id)).map(u=>esc(u.name)).join(', ');
+notify(`Pengingat patungan ${c.type} ${c.who}`,`<p>Iuran ${rp(c.amount)}. Yang belum: ${n||'semua sudah'}.</p>`)}};
+
+function exportXlsx(){const wb=XLSX.utils.book_new(),U=mem(),add=(n,r)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(r),n);
+add('Uang Kas',U.map(u=>{const r={Nama:u.name};MONTHS.forEach((m,i)=>r[BLN[i]]=kasOf(u.id,m)?.st==='LUNAS'?'LUNAS':'BELUM');r['Total Lunas']=MONTHS.filter(m=>kasOf(u.id,m)?.st==='LUNAS').length;return r}));
+add('Kehadiran',db.sessions.flatMap(s=>U.map(u=>({Tanggal:s.date,Latihan:s.title,Nama:u.name,Status:db.att.find(a=>a.sid===s.id&&a.uid===u.id)?.status||'Belum absen',Persetujuan:db.att.find(a=>a.sid===s.id&&a.uid===u.id)?.ap||'-'}))));
+add('Dana Sosial',db.social.flatMap(c=>U.map(u=>({Jenis:c.type,Penerima:c.who,Kunjungan:c.visit,Nominal:c.amount,Anggota:u.name,Patungan:c.paid.includes(u.id)?'Sudah bayar':'Belum bayar'}))));
+add('Master Anggota',U.map(u=>({Nama:u.name,Email:u.email,'No. HP':u.phone,Peran:u.role,Status:u.status})));
+add('Rekap Latihan '+rm,U.map(u=>{const w=wkn(u.id,rm);return{Nama:u.name,'Minggu 1':w[0],'Minggu 2':w[1],'Minggu 3':w[2],'Minggu 4':w[3],Total:w.reduce((a,b)=>a+b,0),Target:TARGET}}));
+XLSX.writeFile(wb,`VoxAngelica_Rekap_${new Date().toISOString().slice(0,10)}.xlsx`)}
+
+/* ===== Rekap & chart latihan ===== */
+const LPM=2,TARGET=LPM*4,nowYM=()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')};
+let rm=nowYM();
+const apB=v=>`<span class="badge ${v==='DISETUJUI'?'g':v==='DITOLAK'?'r':'y'}">${{MENUNGGU:'Waiting',DISETUJUI:'Approved',DITOLAK:'Rejected'}[v]||v}</span>`;
+const sdate=a=>db.sessions.find(s=>s.id===a.sid)?.date||'';
+const hadir=(u,ym)=>db.att.filter(a=>a.uid===u&&a.status==='HADIR'&&a.ap==='DISETUJUI'&&sdate(a).startsWith(ym));
+const wkn=(u,ym)=>[1,2,3,4].map(w=>hadir(u,ym).filter(a=>Math.min(4,Math.ceil(+sdate(a).slice(8,10)/7))===w).length);
+const bar=(v,max)=>`<div class="h-3 rounded-full overflow-hidden" style="background:#f3e6c0"><div class="h-3 rounded-full" style="width:${Math.min(100,v/max*100)}%;background:linear-gradient(90deg,#c9a24b,#3b6fd4)"></div></div>`;
+function bphRekap(){return `<div class="card mt-5"><div class="flex flex-wrap justify-between items-center gap-2"><h2>Rekap latihan per anggota</h2><input type="month" class="inp" value="${rm}" onchange="rm=this.value||rm;render()"></div>
+<p class="text-sm text-slate-300 mb-2">Target ${LPM}x per minggu, ${TARGET}x per bulan. Hanya absen Hadir yang sudah Approved yang dihitung.</p>
+${mem().length?tbl(['Anggota','Mgg 1','Mgg 2','Mgg 3','Mgg 4','Total','Capaian'],mem().map(u=>{const w=wkn(u.id,rm),t=w.reduce((a,b)=>a+b,0);return [esc(u.name),...w.map(x=>`${x}/${LPM}`),`<b>${t}/${TARGET}</b>`,`<div style="min-width:110px">${bar(t,TARGET)}</div>`]})):empty('Belum ada anggota terdaftar.')}</div>`}
+function myChart(id){const n=new Date(),ms=[5,4,3,2,1,0].map(i=>{const d=new Date(n.getFullYear(),n.getMonth()-i,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}),vals=ms.map(m=>hadir(id,m).length),w=wkn(id,ms[5]);
+return `<div class="card mt-5"><h2>Rekap kehadiran saya</h2><p class="text-sm text-slate-300 mb-3">Latihan Approved per bulan (target ${TARGET}x, ${LPM}x per minggu)</p>
+<div class="flex items-end gap-3" style="height:170px">${vals.map((v,i)=>`<div class="flex-1 flex flex-col items-center justify-end h-full"><span class="text-sm font-semibold mb-1">${v}</span><div class="w-full rounded-t-lg" style="height:${Math.max(3,Math.min(100,v/TARGET*100))*1.2}px;background:linear-gradient(180deg,#3b6fd4,#c9a24b)"></div><span class="text-xs mt-1 text-slate-300">${BLN[+ms[i].slice(5)-1]}</span></div>`).join('')}</div>
+<p class="text-sm mt-4 mb-1">Bulan ini: <b>${vals[5]}/${TARGET}</b></p>${bar(vals[5],TARGET)}
+<div class="grid grid-cols-4 gap-2 mt-3">${w.map((x,i)=>`<div class="rounded-lg p-2 text-center" style="background:#fbf6e8"><div class="text-xs text-slate-300">Minggu ${i+1}</div><b>${x}/${LPM}</b></div>`).join('')}</div></div>`}
+
+/* ===== Mode tamu (tanpa login) ===== */
+const PROT=[];let showAuth=false;
+const vid=u=>{if(!u||!/^https?:\/\//i.test(u))return '';const m=u.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
+return m?`<iframe class="rounded-xl my-2" style="width:100%;max-width:640px;aspect-ratio:16/9;border:0" src="https://www.youtube.com/embed/${m[1]}" allowfullscreen></iframe>`:`<p class="my-2"><a class="btn2" href="${esc(u)}" target="_blank" rel="noopener">Buka video rekaman</a></p>`};
+function askLogin(){showAuth=true;reg=false;render();window.scrollTo&&window.scrollTo(0,0)}
+function go(k){if(PROT.includes(k)&&!cur())return askLogin();tab=k;render()}
+function jadwalCard(){const ss=db.sessions.filter(s=>s.status!=='SELESAI').sort((a,b)=>a.date>b.date?1:-1);
+return `<div class="card mt-5"><h2>Jadwal latihan</h2>${ss.map(s=>`<div class="flex flex-wrap items-center gap-3 border-b border-blue-900 py-3"><b class="text-lg">${esc(s.title)}</b><span class="text-slate-300">${fmt(s.date)}</span>${badge(s.status)}</div>`).join('')||empty('Belum ada jadwal latihan.')}</div>`}
+function guestHome(){return `<h1 class="font-serif text-5xl text-amber-200 mb-4">Selamat datang di Vox Angelica</h1>${feedCard()}`}
+
+/* ===== Pengumuman + agenda + absen dalam satu feed ===== */
+const today=()=>nowYM()+'-'+String(new Date().getDate()).padStart(2,'0');
+const sessAct=x=>{if(isB())return x.status==='TERJADWAL'?`<button class="btn mt-2" onclick="A.set('${x.id}','BERLANGSUNG')">Mulai latihan</button>`:x.status==='BERLANGSUNG'?`<button class="btn2 mt-2" onclick="A.set('${x.id}','SELESAI')">Selesaikan</button> <button class="btn2 mt-2" onclick="A.okAll('${x.id}')">Approve semua yang waiting</button>`:'';
+if(x.status!=='BERLANGSUNG')return '';const m=db.att.find(a=>a.sid===x.id&&a.uid===me);
+return `<div class="flex flex-wrap items-center gap-3 mt-2"><button class="btn" ${m?.ap==='DISETUJUI'?'disabled style="opacity:.6"':''} onclick="A.mark('${x.id}','HADIR')">Hadir</button>${m?apB(m.ap)+(m.status!=='HADIR'?' '+badge(m.status):''):''}<button class="btn2" onclick="A.mark('${x.id}','IZIN')">Izin</button><button class="btn2" onclick="A.mark('${x.id}','SAKIT')">Sakit</button></div>`};
+const feedItem=a=>{const x=a.sid&&db.sessions.find(y=>y.id===a.sid);
+return `<div class="border-b border-blue-900 py-3"><div class="flex flex-wrap items-center gap-2"><b class="text-lg">${esc(a.title)}</b>${a.type!=='Pengumuman'?badge(a.type.toUpperCase()):''}${x?badge(x.status):''}</div>
+${a.date?`<p class="text-slate-300">${fmt(a.date)}${a.place?' - '+esc(a.place):''}</p>`:`<p class="text-sm text-slate-400">${fmt(a.at)}</p>`}${a.body?`<p class="mt-1">${esc(a.body)}</p>`:''}${x?sessAct(x):''}${isB()?`<div><button class="btn2 mt-2" onclick="G.del('${a.id}')">Hapus</button></div>`:''}</div>`};
+function feedSorted(){const td=today(),act=a=>db.sessions.find(x=>x.id===a.sid)?.status==='BERLANGSUNG',up=a=>a.date&&a.date>=td&&!act(a);
+return [...db.ann.filter(act),...db.ann.filter(up).sort((x,y)=>x.date>y.date?1:-1),...db.ann.filter(a=>!act(a)&&!up(a)).sort((x,y)=>(x.date||x.at)<(y.date||y.at)?1:-1)]}
+const feedCard=()=>`<div class="card mt-5"><h2>Pengumuman dan agenda</h2>${feedSorted().map(feedItem).join('')||empty('Belum ada pengumuman.')}</div>`;
+const postForm=()=>`<div class="card mt-5"><h2>Buat pengumuman / jadwal</h2><form onsubmit="G.add(event);return false" class="flex flex-wrap gap-2 items-end"><select name=type class=inp><option>Pengumuman</option><option>Latihan</option><option>Pelayanan</option><option>Konser</option></select><input name=title class=inp placeholder="Judul" required><input type=date name=date class=inp><input name=place class=inp placeholder="Tempat (opsional)"><textarea name=body class="inp w-full" rows=2 placeholder="Isi (opsional)"></textarea><button class="btn">Simpan dan kirim email</button></form><p class="text-sm text-slate-300 mt-2">Pilih Latihan agar absensi otomatis dibuat. Tanggal boleh kosong untuk pengumuman biasa.</p></div>`;
+
+/* ===== Tampilan ===== */
+const annList=n=>db.ann.slice(0,n).map(a=>`<div class="border-b border-blue-900 py-2"><b>${esc(a.title)}</b> <span class="text-xs text-slate-400">${a.at}</span><p class="text-sm text-slate-300">${esc(a.body)}</p></div>`).join('')||empty('Belum ada pengumuman.');
+const form=(fn,inner,btn)=>`<form onsubmit="${fn}(event);return false" class="flex flex-wrap gap-2 items-end">${inner}<button class="btn">${btn}</button></form>`;
+const V={
+home(){if(!cur())return guestHome();const u=cur(),b=isB(),pend=db.kas.filter(k=>k.st==='MENUNGGU').length,unpaid=db.social.reduce((n,c)=>n+mem().length-c.paid.length,0);
+return `<h1 class="font-serif text-4xl text-amber-200">Shalom, ${esc(u.name)}</h1><p class="text-slate-300 mb-5">${b?'Panel BPH':'Dashboard Anggota'}</p>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3">${b?stat('Anggota',mem().length)+stat('Bukti kas menunggu',pend)+stat('Patungan belum bayar',unpaid)+stat('Absen waiting',db.att.filter(a=>a.ap==='MENUNGGU').length)
+:stat('Latihan dihadiri',db.att.filter(a=>a.uid===u.id&&a.status==='HADIR'&&a.ap==='DISETUJUI').length)+stat('Kas lunas',db.kas.filter(k=>k.uid===u.id&&k.st==='LUNAS').length+'/12')+stat('Lagu',db.songs.length)+stat('Pengumuman',db.ann.length)}</div>
+${b?postForm():''}
+${feedCard()}
+${b?bphRekap():myChart(u.id)}
+${b?`<div class="card mt-5"><div class="flex flex-wrap justify-between gap-2 mb-2"><h2>Master data anggota</h2><button class="btn" onclick="exportXlsx()">Download Database / Rekap Excel</button></div>
+${tbl(['Nama','No. HP','Email Gmail (untuk notifikasi)'],mem().map(x=>[esc(x.name),esc(x.phone),`<input class="inp" value="${esc(x.email)}" placeholder="isi email" onchange="Au.email('${x.id}',this.value)">`]))}</div>`:''}`},
+abs(){const b=isB(),act=db.sessions.find(s=>s.status==='BERLANGSUNG');let h='';
+if(act&&!b){const mine=db.att.find(a=>a.sid===act.id&&a.uid===me);h+=`<div class="card mb-4"><h2>${esc(act.title)} ${badge('BERLANGSUNG')}</h2>
+<div class="flex flex-wrap items-center gap-3"><button class="btn big" ${mine?.ap==='DISETUJUI'?'disabled style="opacity:.6"':''} onclick="A.mark('${act.id}','HADIR')">Hadir</button>${mine?apB(mine.ap)+(mine.status!=='HADIR'?' '+badge(mine.status):''):'<span class="text-sm text-slate-300">Tekan Hadir untuk absen</span>'}</div>
+<div class="flex gap-2 mt-3"><button class="btn2" onclick="A.mark('${act.id}','IZIN')">Izin</button><button class="btn2" onclick="A.mark('${act.id}','SAKIT')">Sakit</button></div></div>`}
+else if(!b)h+=`<div class="card mb-4">${empty('Belum ada latihan yang berlangsung. Absensi dibuka oleh BPH saat latihan dimulai.')}</div>`;
+h+='<div class="grid lg:grid-cols-2 gap-4 items-start">'+db.sessions.map(s=>`<div class="card mb-3"><div class="flex flex-wrap justify-between gap-2"><h2>${esc(s.title)} <span class="text-lg text-slate-300">${fmt(s.date)}</span> ${badge(s.status)} ${b?'':(a=>a?apB(a.ap)+' '+badge(a.status):'')(db.att.find(x=>x.sid===s.id&&x.uid===me))}</h2>
+${b?`<div class="flex gap-2">${s.status==='TERJADWAL'?`<button class="btn" onclick="A.set('${s.id}','BERLANGSUNG')">Mulai latihan</button>`:''}${s.status==='BERLANGSUNG'?`<button class="btn2" onclick="A.set('${s.id}','SELESAI')">Selesaikan</button>`:''}</div>`:''}</div>
+${(b?`<button class="btn2 my-2" onclick="A.okAll('${s.id}')">Approve semua yang waiting</button>`:'')+tbl(['Anggota','Absen','Persetujuan'],mem().map(u=>{const a=db.att.find(a=>a.sid===s.id&&a.uid===u.id);return [esc(u.name),a?badge(a.status):'-',a?apB(a.ap)+(b&&a.ap!=='DISETUJUI'?` <button class="btn2" onclick="A.ap('${s.id}','${u.id}','DISETUJUI')">Approve</button>`:'')+(b&&a.ap==='MENUNGGU'?` <button class="btn2" onclick="A.ap('${s.id}','${u.id}','DITOLAK')">Tolak</button>`:''):'-']}))}</div>`).join('')+'</div>';return h},
+kas(){const b=isB(),open=MONTHS.filter(m=>['BELUM','DITOLAK'].includes(kasOf(me,m)?.st||'BELUM'));
+let h=b?'':!cur()?`<div class="card mb-4"><h2>Uang kas</h2><button class="btn" onclick="askLogin()">Bayar uang kas ${rp(KAS)}</button></div>`:`<div class="card mb-4"><h2>Status kas saya ${Y} <span class="text-sm text-slate-300">(${rp(KAS)}/bulan)</span></h2><div class="grid grid-cols-3 md:grid-cols-6 gap-2">${MONTHS.map((m,i)=>`<div class="rounded-lg bg-blue-950 p-2 text-center"><div class="text-xs text-slate-300">${BLN[i]}</div>${badge(kasOf(me,m)?.st||'BELUM')}</div>`).join('')}</div></div>
+<div class="card mb-4"><h2>Konfirmasi pembayaran kas</h2><p class="text-sm text-slate-300 mb-3">Sudah bayar tunai ke Bendahara? Pilih Tunai. Bayar lewat transfer? Pilih Transfer dan unggah buktinya. BPH akan meng-approve.</p>${open.length?`<form onsubmit="K.up(event);return false" class="flex flex-wrap gap-3 items-end"><select name=m class=inp>${open.map(m=>`<option value="${m}">${BLN[+m.slice(5)-1]} ${Y}</option>`).join('')}</select><select name=how class=inp onchange="this.form.file.style.display=this.value==='TRANSFER'?'':'none'"><option value="TUNAI">Tunai ke Bendahara</option><option value="TRANSFER">Transfer (unggah bukti)</option></select><input type=file name=file accept="image/*,.pdf" class=inp style="display:none"><button class="btn">Kirim konfirmasi</button></form>`:empty('Semua bulan sudah lunas atau menunggu verifikasi.')}</div>`;
+if(b){const p=db.kas.filter(k=>k.st==='MENUNGGU');h+=`<div class="card mb-4"><h2>Konfirmasi kas menunggu approval</h2>${p.map(k=>`<div class="border-b border-blue-900 py-2"><b>${nm(k.uid)}</b> - ${BLN[+k.m.slice(5)-1]} ${Y}${k.how==='TUNAI'||!k.proof?'<p class="text-sm text-slate-300 my-1">Mengaku sudah bayar <b>tunai</b> ke Bendahara (tanpa bukti)</p>':fileLink(k.proof,k.fn)}
+<button class="btn" onclick="K.set('${k.uid}','${k.m}','LUNAS')">Approve</button> <button class="btn2" onclick="K.set('${k.uid}','${k.m}','DITOLAK')">Tolak</button></div>`).join('')||empty('Tidak ada konfirmasi yang menunggu.')}</div>`}
+h+=`<div class="card"><h2>Rekap kas anggota</h2>${b?'<p class="text-sm text-slate-300 mb-2">Klik tanda di tabel untuk menandai lunas atau membatalkan (misalnya bayar tunai langsung ke Bendahara).</p>':'<p class="text-sm text-slate-300 mb-2">Tanda ✔ berarti sudah lunas.</p>'}${tbl(['Nama',...BLN],mem().map(u=>[esc(u.name),...MONTHS.map(m=>{const c=kasOf(u.id,m)?.st==='LUNAS'?'✔':'·';return b?`<button onclick="K.tog('${u.id}','${m}')" style="font-size:1.3rem;min-width:2rem">${c}</button>`:`<span style="font-size:1.2rem">${c}</span>`})]))}</div>`;return h},
+lagu(){return (isB()?`<div class="card mb-4"><h2>Tambah lagu / rekaman</h2>${form('S.add','<input name=title class=inp placeholder="Judul lagu" required><input name=note class=inp placeholder="Catatan lagu"><input name=video class=inp placeholder="Link video rekaman (YouTube/Drive), opsional"><label class="w-full text-sm text-slate-300">Teks / partitur (PDF atau gambar), opsional jika hanya video</label><input type=file name=file accept="image/*,.pdf" class=inp>','Simpan')}</div>`:'')
++(db.songs.map(s=>`<div class="card mb-3"><h2>${esc(s.title)}</h2><p class="text-sm text-slate-300">${esc(s.note)}</p>${s.file?fileLink(s.file,s.fn):''}${vid(s.video)}</div>`).join('')||`<div class="card">${empty('Belum ada lagu. BPH dapat menambahkan teks, partitur, atau video rekaman di sini.')}</div>`)},
+agenda(){const b=isB();return `<div class="grid md:grid-cols-2 gap-4"><div>${b?`<div class="card mb-4"><h2>Tambah agenda</h2>${form('G.add','<select name=type class=inp><option>Latihan</option><option>Pelayanan</option><option>Konser</option></select><input name=title class=inp placeholder="Judul" required><input type=date name=date class=inp required><input name=place class=inp placeholder="Tempat" required>','Simpan dan kirim email')}</div>`:''}
+<div class="card"><h2>Agenda kegiatan</h2>${db.agenda.map(a=>`<div class="border-b border-blue-900 py-2"><b>${esc(a.title)}</b> ${badge(a.type.toUpperCase())}<p class="text-sm text-slate-300">${fmt(a.date)} - ${esc(a.place)}</p></div>`).join('')||empty('Belum ada agenda.')}</div></div>
+<div>${b?`<div class="card mb-4"><h2>Buat pengumuman</h2>${form('G.ann','<input name=title class=inp placeholder="Judul" required><textarea name=body class="inp w-full" rows=3 placeholder="Isi pengumuman" required></textarea>','Umumkan dan kirim email')}</div>`:''}
+<div class="card"><h2>Papan pengumuman</h2>${annList(20)}</div></div></div>`},
+sosial(){const b=isB(),U=mem(),W=c=>c.wait||[];let h='';
+if(b){h+=`<div class="card mb-4"><h2>Catat musibah duka / sakit</h2>${form('D.add',`<select name=type class=inp><option value=DUKA>Duka (${rp(DUKA)})</option><option value=SAKIT>Sakit (${rp(SAKIT)})</option></select><input name=who class=inp placeholder="Anggota / keluarga yang terkena" required><input type=date name=visit class=inp required><input name=note class=inp placeholder="Keterangan, lokasi kunjungan">`,'Catat')}</div>
+<div class="card mb-4"><h2>Rekap belum patungan</h2>${db.social.map(c=>`<p class="text-sm py-1"><b>${esc(c.type)} ${esc(c.who)}</b>: ${U.filter(u=>!c.paid.includes(u.id)).map(u=>esc(u.name)+(W(c).includes(u.id)?' (waiting)':'')).join(', ')||'semua sudah bayar'}</p>`).join('')||empty('Belum ada catatan.')}</div>`}
+const list=db.social.map(c=>{const p=U.filter(u=>c.paid.includes(u.id)),n=U.filter(u=>!c.paid.includes(u.id)),w=W(c);
+const chipN=u=>w.includes(u.id)?(b?`<span class="inline-flex flex-wrap items-center gap-1">${esc(u.name)} ${apB('MENUNGGU')} <button class="btn2" onclick="D.ap('${c.id}','${u.id}','ok')">Approve</button> <button class="btn2" onclick="D.ap('${c.id}','${u.id}','no')">Tolak</button></span>`:`<span class="badge y">${esc(u.name)} - Waiting</span>`):(b?`<button class="btn2" onclick="D.tog('${c.id}','${u.id}')">${esc(u.name)}</button>`:`<span class="badge r">${esc(u.name)}</span>`);
+const act=b?`<button class="btn mt-3" onclick="D.remind('${c.id}')">Kirim pengingat email</button>`:(c.paid.includes(me)?`<p class="mt-3">${apB('DISETUJUI')}</p>`:w.includes(me)?`<p class="mt-3">${apB('MENUNGGU')} <span class="text-slate-300">Menunggu approve BPH</span></p>`:`<button class="btn mt-3" onclick="D.pay('${c.id}')">Bayar ${rp(c.amount)}</button>`);
+return `<div class="card"><h2>${badge(c.type)} ${esc(c.who)}</h2><p class="text-sm text-slate-300">Kunjungan ${fmt(c.visit)}. Iuran ${rp(c.amount)}. ${esc(c.note)}</p>
+<div class="grid md:grid-cols-2 gap-3 mt-2"><div><b class="text-sm">Sudah bayar (${p.length})</b><div class="flex flex-wrap gap-1 mt-1">${p.map(u=>`<span class="badge g">${esc(u.name)}</span>`).join('')||'-'}</div></div>
+<div><b class="text-sm">Belum bayar (${n.length})</b><div class="flex flex-wrap gap-2 mt-1">${n.map(chipN).join('')||'-'}</div></div></div>${act}</div>`}).join('');
+return h+(list?`<div class="grid lg:grid-cols-2 gap-4 items-start">${list}</div>`:`<div class="card">${empty('Belum ada patungan aktif.')}</div>`)}};
+
+function authView(){return `<div class="min-h-screen grid place-items-center p-4"><div class="card w-full max-w-lg"><div class="text-center mb-4"><div class="text-5xl text-amber-200">𝄞</div><h1 class="font-serif text-5xl text-amber-200">Vox Angelica</h1><p class="text-slate-300 text-sm">Kelola latihan, kas, dan pelayanan paduan suara</p></div>
+<form onsubmit="Au.go(event);return false" class="space-y-3"><input name=name class="inp w-full" placeholder="Nama lengkap" required>${reg?'<input name=phone type=tel class="inp w-full" placeholder="No. telepon / HP" required>':''}
+<input name=pass type=password minlength=4 class="inp w-full" placeholder="Kata sandi" required>
+<button class="btn w-full">${reg?'Daftar':'Masuk'}</button></form>
+<p class="text-center text-sm mt-3"><a href="#" class="underline text-amber-200" onclick="reg=!reg;render();return false">${reg?'Sudah punya akun? Masuk':'Belum punya akun? Daftar'}</a></p><p class="text-center mt-2"><a href="#" class="underline text-slate-300" onclick="showAuth=false;render();return false">Kembali ke beranda</a></p>
+</div></div>`}
+
+function render(){const a=$('#app');if(!cur()&&showAuth){a.innerHTML=authView();return}
+if(!cur()&&PROT.includes(tab))tab='home';
+const T=[['home','Beranda'],['abs','Absensi'],['kas','Uang Kas'],['lagu','Songbook'],['sosial','Dana Sosial']];
+a.innerHTML=`<header class="flex flex-wrap gap-2 justify-between items-center px-4 md:px-10 py-4 border-b border-yellow-700/30"><span class="font-serif text-2xl text-amber-200">𝄞 Vox Angelica</span>
+${cur()?`<span class="text-sm">${esc(cur().name)} ${badge(cur().role)} <button class="btn2 ml-2" onclick="Au.out()">Keluar</button></span>`:`<button class="btn" onclick="Au.open(false)">Masuk / Daftar</button>`}</header>
+<nav class="flex gap-2 overflow-x-auto px-4 md:px-10 py-3">${T.map(([k,l])=>`<button class="tab ${tab===k?'on':''}" onclick="go('${k}')">${l}${!cur()&&PROT.includes(k)?' 🔒':''}</button>`).join('')}</nav>
+<main class="w-full px-4 md:px-10 py-6">${V[tab]()}</main>`}
+render();
+</script></body></html>
